@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Cloud, RefreshCw, Brain, TreePine, Zap, Network, Target, ChevronDown, Play, Pause } from "lucide-react"
+import { Cloud, Brain, TreePine, Zap, Network, Target, ChevronDown, Play, Pause } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CollapsibleProps {
@@ -98,7 +98,6 @@ export default function ThingSpeakPage() {
   // Auto-refresh states
   const [isAutoRefresh, setIsAutoRefresh] = useState(false)
   const refreshInterval = 30 // seconds - fixed to 30s, not configurable by user
-  const [countdown, setCountdown] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const isRunningRef = useRef(false)
 
@@ -171,15 +170,8 @@ export default function ThingSpeakPage() {
         
         if (!isRunningRef.current) break
         
-        // Countdown timer
-        for (let i = refreshInterval; i > 0 && isRunningRef.current; i--) {
-          setCountdown(i)
-          await sleep(1)
-          
-          if (abortControllerRef.current?.signal.aborted) break
-        }
-        
-        setCountdown(0)
+        // Wait for next refresh
+        await sleep(refreshInterval)
       }
     } catch (err) {
       if (err instanceof Error && err.message !== 'Aborted') {
@@ -189,7 +181,6 @@ export default function ThingSpeakPage() {
       }
     } finally {
       isRunningRef.current = false
-      setCountdown(0)
     }
   }, [handlePredict])
 
@@ -198,7 +189,6 @@ export default function ThingSpeakPage() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    setCountdown(0)
   }, [])
 
   const toggleAutoRefresh = () => {
