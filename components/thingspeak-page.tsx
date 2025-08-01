@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Cloud, RefreshCw, Brain, TreePine, Zap, Network, Target, ChevronDown, Play, Pause, Timer } from "lucide-react"
+import { Loader2, Cloud, RefreshCw, Brain, TreePine, Zap, Network, Target, ChevronDown, Play, Pause } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CollapsibleProps {
@@ -97,7 +97,7 @@ export default function ThingSpeakPage() {
   
   // Auto-refresh states
   const [isAutoRefresh, setIsAutoRefresh] = useState(false)
-  const [refreshInterval, setRefreshInterval] = useState(10) // seconds
+  const refreshInterval = 30 // seconds - fixed to 30s, not configurable by user
   const [countdown, setCountdown] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const isRunningRef = useRef(false)
@@ -191,7 +191,7 @@ export default function ThingSpeakPage() {
       isRunningRef.current = false
       setCountdown(0)
     }
-  }, [handlePredict, refreshInterval])
+  }, [handlePredict])
 
   const stopAutoRefresh = useCallback(() => {
     isRunningRef.current = false
@@ -210,9 +210,7 @@ export default function ThingSpeakPage() {
     }
   }
 
-  const handleRefreshIntervalChange = (seconds: number) => {
-    setRefreshInterval(seconds)
-  }
+
 
   // Auto-refresh effect
   useEffect(() => {
@@ -233,73 +231,34 @@ export default function ThingSpeakPage() {
             <Cloud className="mr-2 h-5 w-5" />
             Dự đoán từ ThingSpeak
           </CardTitle>
-          <CardDescription>Lấy dữ liệu cảm biến từ ThingSpeak, tính trung bình và thực hiện dự đoán</CardDescription>
+          <CardDescription>Thu thập dữ liệu từ cảm biến khí, nhiệt độ, độ ẩm và thực hiện dự đoán chất lượng thực phẩm</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Auto-refresh controls */}
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Timer className="h-4 w-4" />
-                <span className="font-medium">Auto-refresh</span>
-              </div>
-              <Button
-                variant={isAutoRefresh ? "default" : "outline"}
-                size="sm"
-                onClick={toggleAutoRefresh}
-              >
-                {isAutoRefresh ? (
-                  <>
-                    <Pause className="mr-2 h-4 w-4" />
-                    Dừng
-                  </>
-                ) : (
-                  <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Bắt đầu
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            <div className="space-y-2">
-              <span className="text-sm font-medium">Khoảng thời gian refresh:</span>
-              <div className="flex space-x-2">
-                {[5, 10, 30, 60].map(seconds => (
-                  <Button
-                    key={seconds}
-                    variant={refreshInterval === seconds ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleRefreshIntervalChange(seconds)}
-                    disabled={isAutoRefresh}
-                  >
-                    {seconds}s
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {isAutoRefresh && countdown > 0 && (
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Refresh tiếp theo trong: {countdown}s</span>
-              </div>
-            )}
+          {/* Auto-refresh control */}
+          <div className="flex justify-center">
+            <Button
+              variant={isAutoRefresh ? "destructive" : "default"}
+              onClick={toggleAutoRefresh}
+              disabled={isLoading}
+              className="w-full max-w-md"
+            >
+              {isAutoRefresh ? (
+                <>
+                  <Pause className="mr-2 h-4 w-4" />
+                  Dừng thu thập dữ liệu
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Bắt đầu thu thập dữ liệu
+                </>
+              )}
+            </Button>
           </div>
 
-          <Button onClick={handlePredict} disabled={isLoading} className="w-full">
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Đang lấy dữ liệu...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Lấy dữ liệu và dự đoán
-              </>
-            )}
-          </Button>
+
+
+
         </CardContent>
       </Card>
 
@@ -332,7 +291,7 @@ export default function ThingSpeakPage() {
                     Độ tin cậy: {((result.predictions.meta?.probability || 0) * 100).toFixed(2)}%
                   </div>
                   <Badge variant="default" className="text-sm px-4 py-2">
-                    Mô hình Base-5
+                    Meta Model
                   </Badge>
                 </div>
               </CardContent>
@@ -345,7 +304,7 @@ export default function ThingSpeakPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                   <Brain className="h-4 w-4 mr-2" />
-                  <CardTitle className="text-sm font-medium">Mô hình Base-1</CardTitle>
+                  <CardTitle className="text-sm font-medium">Base Model 1</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">{odorLabels[result.predictions.base_1.class_label] || result.predictions.base_1.class_label}</div>
@@ -358,7 +317,7 @@ export default function ThingSpeakPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                   <TreePine className="h-4 w-4 mr-2" />
-                  <CardTitle className="text-sm font-medium">Mô hình Base-2</CardTitle>
+                  <CardTitle className="text-sm font-medium">Base Model 2</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">{odorLabels[result.predictions.base_2.class_label] || result.predictions.base_2.class_label}</div>
@@ -368,7 +327,7 @@ export default function ThingSpeakPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                   <Zap className="h-4 w-4 mr-2" />
-                  <CardTitle className="text-sm font-medium">Mô hình Base-3</CardTitle>
+                  <CardTitle className="text-sm font-medium">Base Model 3</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">{odorLabels[result.predictions.base_3.class_label] || result.predictions.base_3.class_label}</div>
@@ -378,7 +337,7 @@ export default function ThingSpeakPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                   <Network className="h-4 w-4 mr-2" />
-                  <CardTitle className="text-sm font-medium">Mô hình Base-4</CardTitle>
+                  <CardTitle className="text-sm font-medium">Base Model 4</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">{odorLabels[result.predictions.base_4.class_label] || result.predictions.base_4.class_label}</div>
@@ -395,15 +354,18 @@ export default function ThingSpeakPage() {
             <CardContent>
               {result.input_data && result.input_data.length > 0 ? (
                 <>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {result.metadata.sensor_names.map((sensor, index) => (
-                      <div key={sensor} className="text-center p-3 bg-muted rounded">
-                        <div className="text-xs text-muted-foreground">{sensor}</div>
-                        <div className="font-mono text-lg font-bold">
-                          {result.input_data?.[index] ? result.input_data[index].toFixed(2) : 'N/A'}
+                  <div className="grid grid-cols-2 gap-4">
+                    {['Temp', 'Humid'].map((sensorName, index) => {
+                      const unit = sensorName === 'Temp' ? '°C' : '%';
+                      return (
+                        <div key={sensorName} className="text-center p-3 bg-muted rounded">
+                          <div className="text-xs text-muted-foreground">{sensorName}</div>
+                          <div className="font-mono text-lg font-bold">
+                            {result.input_data?.[index + 2] ? `${result.input_data[index + 2].toFixed(2)}${unit}` : 'N/A'}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-4">
                     Dữ liệu trung bình được tính từ {result.metadata?.thingspeak?.records_fetched || 'nhiều'} bản ghi. <br />
@@ -415,13 +377,16 @@ export default function ThingSpeakPage() {
                   <div className="text-sm text-muted-foreground mb-4">
                     Dữ liệu cảm biến chi tiết không có sẵn trong response từ server.
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 opacity-50">
-                    {result.metadata.sensor_names.map((sensor) => (
-                      <div key={sensor} className="text-center p-3 bg-muted rounded">
-                        <div className="text-xs text-muted-foreground">{sensor}</div>
-                        <div className="font-mono text-lg font-bold">--</div>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-2 gap-4 opacity-50">
+                    {['Temp', 'Humid'].map((sensorName) => {
+                      const unit = sensorName === 'Temp' ? '°C' : '%';
+                      return (
+                        <div key={sensorName} className="text-center p-3 bg-muted rounded">
+                          <div className="text-xs text-muted-foreground">{sensorName}</div>
+                          <div className="font-mono text-lg font-bold">--{unit}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-4">
                     Kết quả dự đoán vẫn được tính toán từ dữ liệu ThingSpeak. <br />
