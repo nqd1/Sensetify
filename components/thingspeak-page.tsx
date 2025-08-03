@@ -148,47 +148,7 @@ const ChartWrapper = ({ children, data, isStreaming }: { children: React.ReactNo
   return <>{children}</>;
 };
 
-const chartOptions: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-        legend: {
-            display: false,
-        },
-        tooltip: {
-            callbacks: {
-                title: (context) => `Time: ${context[0].label}`,
-                label: (context) => {
-                    const label = context.dataset.label || '';
-                    const value = context.parsed.y;
-                    return `${label}: ${value.toFixed(2)}`;
-                },
-            },
-        },
-    },
-    scales: {
-        x: {
-            ticks: {
-                font: {
-                    size: 10,
-                },
-            },
-            grid: {
-                color: 'rgba(255, 255, 255, 0.1)',
-            }
-        },
-        y: {
-            ticks: {
-                font: {
-                    size: 10,
-                },
-            },
-            grid: {
-                color: 'rgba(255, 255, 255, 0.1)',
-            }
-        },
-    },
-};
+
 
 // Function để tạo cấu hình chart nhiệt độ với cận trên/dưới động
 const getTemperatureChartOptions = (data: ChartDataPoint[]): ChartOptions<'line'> => {
