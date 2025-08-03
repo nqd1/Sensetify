@@ -190,48 +190,244 @@ const chartOptions: ChartOptions<'line'> = {
     },
 };
 
-// Cấu hình chart riêng cho nhiệt độ với độ chia nhỏ nhất là 0.5
-const temperatureChartOptions: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-        legend: {
-            display: false,
-        },
-        tooltip: {
-            callbacks: {
-                title: (context) => `Time: ${context[0].label}`,
-                label: (context) => {
-                    const label = context.dataset.label || '';
-                    const value = context.parsed.y;
-                    return `${label}: ${value.toFixed(2)}°C`;
+// Function để tạo cấu hình chart nhiệt độ với cận trên/dưới động
+const getTemperatureChartOptions = (data: ChartDataPoint[]): ChartOptions<'line'> => {
+    let min: number | undefined = undefined;
+    let max: number | undefined = undefined;
+    
+    // Tính min/max từ dữ liệu
+    if (data.length > 0) {
+        const values = data.map(d => d.value);
+        const dataMin = Math.min(...values);
+        const dataMax = Math.max(...values);
+        min = dataMin - 2; // Cận dưới = min - 2°C
+        max = dataMax + 2; // Cận trên = max + 2°C
+    }
+    
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false,
+            },
+            tooltip: {
+                callbacks: {
+                    title: (context) => `Time: ${context[0].label}`,
+                    label: (context) => {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        return `${label}: ${value.toFixed(2)}°C`;
+                    },
                 },
             },
         },
-    },
-    scales: {
-        x: {
-            ticks: {
-                font: {
-                    size: 10,
+        scales: {
+            x: {
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+            y: {
+                min: min,
+                max: max,
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                    stepSize: 0.5, 
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+        },
+    };
+};
+
+// Function để tạo cấu hình chart NH3 với cận trên/dưới động
+const getAmmoniacChartOptions = (data: ChartDataPoint[]): ChartOptions<'line'> => {
+    let min: number | undefined = undefined;
+    let max: number | undefined = undefined;
+    
+    // Tính min/max từ dữ liệu
+    if (data.length > 0) {
+        const values = data.map(d => d.value);
+        const dataMin = Math.min(...values);
+        const dataMax = Math.max(...values);
+        min = dataMin - 100; // Cận dưới = min - 100
+        max = dataMax + 100; // Cận trên = max + 100
+    }
+    
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false,
+            },
+            tooltip: {
+                callbacks: {
+                    title: (context) => `Time: ${context[0].label}`,
+                    label: (context) => {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        return `${label}: ${value.toFixed(2)}`;
+                    },
                 },
             },
-            grid: {
-                color: 'rgba(255, 255, 255, 0.1)',
-            }
         },
-        y: {
-            ticks: {
-                font: {
-                    size: 10,
+        scales: {
+            x: {
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
                 },
-                stepSize: 0.5, // Độ chia nhỏ nhất là 0.5
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
             },
-            grid: {
-                color: 'rgba(255, 255, 255, 0.1)',
-            }
+            y: {
+                min: min,
+                max: max,
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                    stepSize: 50, // Độ chia 50
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
         },
-    },
+    };
+};
+
+// Function để tạo cấu hình chart H2S với cận trên/dưới động
+const getHydrosulfideChartOptions = (data: ChartDataPoint[]): ChartOptions<'line'> => {
+    let min: number | undefined = undefined;
+    let max: number | undefined = undefined;
+    
+    // Tính min/max từ dữ liệu
+    if (data.length > 0) {
+        const values = data.map(d => d.value);
+        const dataMin = Math.min(...values);
+        const dataMax = Math.max(...values);
+        min = dataMin - 100; // Cận dưới = min - 100
+        max = dataMax + 100; // Cận trên = max + 100
+    }
+    
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false,
+            },
+            tooltip: {
+                callbacks: {
+                    title: (context) => `Time: ${context[0].label}`,
+                    label: (context) => {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        return `${label}: ${value.toFixed(2)}`;
+                    },
+                },
+            },
+        },
+        scales: {
+            x: {
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+            y: {
+                min: min,
+                max: max,
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                    stepSize: 50, // Độ chia 50
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+        },
+    };
+};
+
+// Function để tạo cấu hình chart Độ ẩm với cận trên/dưới động
+const getHumidityChartOptions = (data: ChartDataPoint[]): ChartOptions<'line'> => {
+    let min: number | undefined = undefined;
+    let max: number | undefined = undefined;
+    
+    // Tính min/max từ dữ liệu
+    if (data.length > 0) {
+        const values = data.map(d => d.value);
+        const dataMin = Math.min(...values);
+        const dataMax = Math.max(...values);
+        min = dataMin - 10; // Cận dưới = min - 10
+        max = dataMax + 10; // Cận trên = max + 10
+    }
+    
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false,
+            },
+            tooltip: {
+                callbacks: {
+                    title: (context) => `Time: ${context[0].label}`,
+                    label: (context) => {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        return `${label}: ${value.toFixed(2)}%`;
+                    },
+                },
+            },
+        },
+        scales: {
+            x: {
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+            y: {
+                min: min,
+                max: max,
+                ticks: {
+                    font: {
+                        size: 10,
+                    },
+                    stepSize: 1, // Độ chia 1
+                },
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)',
+                }
+            },
+        },
+    };
 };
 
 const formatChartJsData = (data: ChartDataPoint[], label: string, color: string): ChartData<'line'> => {
@@ -651,7 +847,7 @@ export default function ThingSpeakPage() {
                 >
                     <ChartWrapper data={chartData.mq136} isStreaming={isStreaming}>
                         <div className="relative h-full">
-                                                       <Line options={chartOptions} data={formatChartJsData(chartData.mq136, 'Amoniac', '#2563eb')} />
+                                                       <Line options={getAmmoniacChartOptions(chartData.mq136)} data={formatChartJsData(chartData.mq136, 'Amoniac', '#2563eb')} />
                         </div>
                     </ChartWrapper>
                 </CardChart>
@@ -666,7 +862,7 @@ export default function ThingSpeakPage() {
                 >
                     <ChartWrapper data={chartData.mq137} isStreaming={isStreaming}>
                         <div className="relative h-full">
-                            <Line options={chartOptions} data={formatChartJsData(chartData.mq137, 'Hydro Sulfide', '#dc2626')} />
+                            <Line options={getHydrosulfideChartOptions(chartData.mq137)} data={formatChartJsData(chartData.mq137, 'Hydro Sulfide', '#dc2626')} />
                         </div>
                     </ChartWrapper>
                 </CardChart>
@@ -681,7 +877,7 @@ export default function ThingSpeakPage() {
                 >
                     <ChartWrapper data={chartData.temp} isStreaming={isStreaming}>
                         <div className="relative h-full">
-                            <Line options={temperatureChartOptions} data={formatChartJsData(chartData.temp, 'Nhiệt độ', '#16a34a')} />
+                            <Line options={getTemperatureChartOptions(chartData.temp)} data={formatChartJsData(chartData.temp, 'Nhiệt độ', '#16a34a')} />
                         </div>
                     </ChartWrapper>
                 </CardChart>
@@ -696,7 +892,7 @@ export default function ThingSpeakPage() {
                 >
                     <ChartWrapper data={chartData.humid} isStreaming={isStreaming}>
                         <div className="relative h-full">
-                           <Line options={chartOptions} data={formatChartJsData(chartData.humid, 'Độ ẩm', '#ca8a04')} />
+                           <Line options={getHumidityChartOptions(chartData.humid)} data={formatChartJsData(chartData.humid, 'Độ ẩm', '#ca8a04')} />
                         </div>
                     </ChartWrapper>
                 </CardChart>
