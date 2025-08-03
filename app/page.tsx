@@ -41,13 +41,20 @@ export default function HomePage() {
   return (
     <div className="container mx-auto p-6 flex flex-col items-center">
       <motion.div 
-        className="mb-8"
+        className="mb-8 flex items-center gap-6"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <h1 className="text-3xl font-bold tracking-tight">Sensetify</h1>
-        <p className="text-muted-foreground">Sensetify - Sản phẩm mũi điện tử với công nghệ AI giúp phân tích nhanh chất lượng thực phẩm, môi trường, sinh học.</p>
+        <img 
+          src="/logo_main.png" 
+          alt="Sensetify Logo" 
+          className="w-24 h-24 object-contain"
+        />
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Sensetify</h1>
+          <p className="text-muted-foreground">Sensetify - Sản phẩm mũi điện tử với công nghệ AI giúp phân tích nhanh chất lượng thực phẩm, môi trường, sinh học.</p>
+        </div>
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
