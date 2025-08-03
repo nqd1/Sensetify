@@ -3,9 +3,34 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardChart } from "@/components/ui/card-chart"
 import { Badge } from "@/components/ui/badge"
 import { Cloud, Brain, TreePine, Zap, Network, Target, ChevronDown, Play, Pause } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartData,
+  ChartOptions,
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
 
 interface CollapsibleProps {
   title: string
@@ -59,6 +84,7 @@ interface PredictionResult {
 
 interface ThingSpeakPrediction {
   input_data?: number[]
+  sensor_arrays?: number[][]  // Mảng 10 data points
   predictions: {
     base_1: PredictionResult
     base_2: PredictionResult
@@ -81,6 +107,18 @@ interface ThingSpeakPrediction {
   }
 }
 
+interface ChartDataPoint {
+  time: string
+  value: number
+}
+
+interface SensorChartData {
+  mq136: ChartDataPoint[]
+  mq137: ChartDataPoint[]
+  temp: ChartDataPoint[]
+  humid: ChartDataPoint[]
+}
+
 const odorLabels: { [key: string]: string } = {
   "Thịt loại 1": "Thịt loại 1",
   "Thịt loại 2": "Thịt loại 2", 
@@ -89,17 +127,114 @@ const odorLabels: { [key: string]: string } = {
   "Thịt hỏng": "Thịt hỏng",
 }
 
+// Wrapper for charts to handle loading/empty states
+const ChartWrapper = ({ children, data, isStreaming }: { children: React.ReactNode, data: ChartDataPoint[], isStreaming: boolean }) => {
+  if (isStreaming && data.length === 0) {
+    return (
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+            Đang tải dữ liệu...
+        </div>
+    );
+  }
+
+  if (!isStreaming && data.length === 0) {
+      return (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+              Không có dữ liệu.
+          </div>
+      );
+  }
+
+  return <>{children}</>;
+};
+
+const chartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            display: false,
+        },
+        tooltip: {
+            callbacks: {
+                title: (context) => `Time: ${context[0].label}`,
+                label: (context) => {
+                    const label = context.dataset.label || '';
+                    const value = context.parsed.y;
+                    return `${label}: ${value.toFixed(2)}`;
+                },
+            },
+        },
+    },
+    scales: {
+        x: {
+            ticks: {
+                font: {
+                    size: 10,
+                },
+            },
+            grid: {
+                color: 'rgba(255, 255, 255, 0.1)',
+            }
+        },
+        y: {
+            ticks: {
+                font: {
+                    size: 10,
+                },
+            },
+            grid: {
+                color: 'rgba(255, 255, 255, 0.1)',
+            }
+        },
+    },
+};
+
+const formatChartJsData = (data: ChartDataPoint[], label: string, color: string): ChartData<'line'> => {
+    return {
+        labels: data.map(p => p.time),
+        datasets: [
+            {
+                label: label,
+                data: data.map(p => p.value),
+                borderColor: color,
+                backgroundColor: `${color}80`, // Add some transparency to fill color
+                pointRadius: 4,
+                pointBackgroundColor: color,
+                tension: 0.1
+            },
+        ],
+    };
+};
+
 export default function ThingSpeakPage() {
   const apiKey = "P91SEPV5ZZG00Y4S"
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<ThingSpeakPrediction | null>(null)
   const [error, setError] = useState<string | null>(null)
   
+  // Chart data states
+  const [chartData, setChartData] = useState<SensorChartData>({
+    mq136: [],
+    mq137: [],
+    temp: [],
+    humid: []
+  })
+  const [currentDataIndex, setCurrentDataIndex] = useState(0)
+  const [pendingSensorArrays, setPendingSensorArrays] = useState<number[][]>([])
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [currentAverageData, setCurrentAverageData] = useState<number[]>([0, 0, 0, 0])
+  
   // Auto-refresh states
   const [isAutoRefresh, setIsAutoRefresh] = useState(false)
   const refreshInterval = 30 // seconds - fixed to 30s, not configurable by user
+  const streamInterval = 3 // seconds - add data every 3 seconds
+  const maxDataPoints = 15 // maximum data points per chart
   const abortControllerRef = useRef<AbortController | null>(null)
+  const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isRunningRef = useRef(false)
+  const pendingSensorArraysRef = useRef<number[][]>([])
+  const currentDataIndexRef = useRef(0)
 
   // Cleanup on unmount
   useEffect(() => {
@@ -107,8 +242,87 @@ export default function ThingSpeakPage() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current)
+      }
     }
   }, [])
+
+  // Add data to charts with limit
+  const addDataToCharts = useCallback((sensorData: number[]) => {
+    const timestamp = new Date().toLocaleTimeString("vi-VN")
+    
+    setChartData(prev => {
+      const newData = { ...prev }
+      
+      // Add new data point for each sensor
+      const sensors = ['mq136', 'mq137', 'temp', 'humid'] as const
+      sensors.forEach((sensor, index) => {
+        const newPoint = {
+          time: timestamp,
+          value: sensorData[index] || 0
+        }
+        
+        // Add new point and keep only last maxDataPoints
+        newData[sensor] = [...prev[sensor], newPoint].slice(-maxDataPoints)
+      })
+      
+      // Calculate new averages from current chart data
+      const newAverages = sensors.map((sensor) => {
+        const sensorData = newData[sensor]
+        if (sensorData.length === 0) return 0
+        const sum = sensorData.reduce((acc, point) => acc + point.value, 0)
+        return sum / sensorData.length
+      })
+      
+      setCurrentAverageData(newAverages)
+      
+      return newData
+    })
+  }, [maxDataPoints])
+
+  // Stream data from pending arrays
+  const streamNextDataPoint = useCallback(() => {
+    const currentIndex = currentDataIndexRef.current
+    const arrays = pendingSensorArraysRef.current
+    
+    if (currentIndex < arrays.length) {
+      const dataPoint = arrays[currentIndex]
+      addDataToCharts(dataPoint)
+      
+      const nextIndex = currentIndex + 1
+      currentDataIndexRef.current = nextIndex
+      setCurrentDataIndex(nextIndex)
+      
+      // Schedule next data point
+      if (nextIndex < arrays.length) {
+        streamingTimeoutRef.current = setTimeout(streamNextDataPoint, streamInterval * 1000)
+      } else {
+        setIsStreaming(false)
+        setPendingSensorArrays([])
+        pendingSensorArraysRef.current = []
+        currentDataIndexRef.current = 0
+        setCurrentDataIndex(0)
+      }
+    }
+  }, [addDataToCharts, streamInterval])
+
+  // Sync refs with state
+  useEffect(() => {
+    pendingSensorArraysRef.current = pendingSensorArrays
+  }, [pendingSensorArrays])
+  
+  useEffect(() => {
+    currentDataIndexRef.current = currentDataIndex
+  }, [currentDataIndex])
+
+  // Start streaming when new data arrives
+  useEffect(() => {
+    if (pendingSensorArrays.length > 0 && !isStreaming && currentDataIndex === 0) {
+      setIsStreaming(true)
+      streamNextDataPoint()
+    }
+  }, [pendingSensorArrays, isStreaming, currentDataIndex, streamNextDataPoint])
 
   const handlePredict = useCallback(async () => {
     setIsLoading(true)
@@ -132,6 +346,18 @@ export default function ThingSpeakPage() {
 
       const data = await response.json()
       setResult(data)
+      
+      // Start streaming if we have sensor arrays
+      if (data.sensor_arrays && data.sensor_arrays.length > 0) {
+        // Clear any previous streaming
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current)
+        }
+        
+        setPendingSensorArrays(data.sensor_arrays)
+        setCurrentDataIndex(0)
+        setIsStreaming(false) // Will be set to true by useEffect
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi kết nối ThingSpeak")
       // Stop auto-refresh on error
@@ -189,6 +415,12 @@ export default function ThingSpeakPage() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
+    if (streamingTimeoutRef.current) {
+      clearTimeout(streamingTimeoutRef.current)
+    }
+    setIsStreaming(false)
+    setCurrentDataIndex(0)
+    setPendingSensorArrays([])
   }, [])
 
   const toggleAutoRefresh = () => {
@@ -336,54 +568,95 @@ export default function ThingSpeakPage() {
             </div>
           </Collapsible>
 
-          {/* Sensor Data */}
+          {/* Real-time Sensor Charts */}
           <Card>
-            <CardHeader>
-              <CardTitle>Dữ liệu cảm biến trung bình từ ThingSpeak</CardTitle>
-            </CardHeader>
             <CardContent>
-              {result.input_data && result.input_data.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    {['Temp', 'Humid'].map((sensorName, index) => {
-                      const unit = sensorName === 'Temp' ? '°C' : '%';
-                      return (
-                        <div key={sensorName} className="text-center p-3 bg-muted rounded">
-                          <div className="text-xs text-muted-foreground">{sensorName}</div>
-                          <div className="font-mono text-lg font-bold">
-                            {result.input_data?.[index + 2] ? `${result.input_data[index + 2].toFixed(2)}${unit}` : 'N/A'}
-                          </div>
+              {/* Dữ liệu trung bình */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium mb-3">Dữ liệu trung bình (cập nhật theo thời gian thực)</h4>
+                <div className="grid grid-cols-4 gap-4">
+                  {['Amoniac', 'Hydro Sulfide', 'Nhiệt độ', 'Độ ẩm'].map((sensorName, index) => {
+                    const unit = sensorName === 'Nhiệt độ' ? '°C' : sensorName === 'Độ ẩm' ? '%' : '';
+                    return (
+                      <div key={sensorName} className="text-center p-3 bg-primary/10 rounded">
+                        <div className="text-xs text-muted-foreground">{sensorName}</div>
+                        <div className="font-mono text-lg font-bold">
+                          {currentAverageData[index] ? `${currentAverageData[index].toFixed(2)}${unit}` : 'N/A'}
                         </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-4">
-                    Dữ liệu trung bình được tính từ {result.metadata?.thingspeak?.records_fetched || 'nhiều'} bản ghi. <br />
-                    Dữ liệu được lấy lúc: {new Date(result.metadata.timestamp).toLocaleString("vi-VN")}
-                  </p>
-                </>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-sm text-muted-foreground mb-4">
-                    Dữ liệu cảm biến chi tiết không có sẵn trong response từ server.
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 opacity-50">
-                    {['Temp', 'Humid'].map((sensorName) => {
-                      const unit = sensorName === 'Temp' ? '°C' : '%';
-                      return (
-                        <div key={sensorName} className="text-center p-3 bg-muted rounded">
-                          <div className="text-xs text-muted-foreground">{sensorName}</div>
-                          <div className="font-mono text-lg font-bold">--{unit}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-4">
-                    Kết quả dự đoán vẫn được tính toán từ dữ liệu ThingSpeak. <br />
-                    Dự đoán được thực hiện lúc: {new Date(result.metadata.timestamp).toLocaleString("vi-VN")}
-                  </p>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+
+            </CardContent>
+          </Card>
+
+          {/* Charts Card */}
+          <Card style={{ backgroundColor: 'rgba(0,0,0,0)', border: 'none', boxShadow: 'none' }}>
+            <CardContent>
+              {/* Charts Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[500px] w-full">
+                {/* Amonia Chart */}
+                <CardChart
+                  title="Cảm biến Amoniac"
+                  description="Đọc dữ liệu cảm biến khí"
+                  chartHeight="h-[350px]"
+                  dataInfo={`Điểm dữ liệu: ${chartData.mq136.length}/${maxDataPoints}`}
+                  className="h-full"
+                >
+                    <ChartWrapper data={chartData.mq136} isStreaming={isStreaming}>
+                        <div className="relative h-full">
+                                                       <Line options={chartOptions} data={formatChartJsData(chartData.mq136, 'Amoniac', '#2563eb')} />
+                        </div>
+                    </ChartWrapper>
+                </CardChart>
+
+                {/* Hydro Sulfide Chart */}
+                <CardChart
+                  title="Cảm biến Hydro Sulfide"
+                  description="Đọc dữ liệu cảm biến khí"
+                  chartHeight="h-[350px]"
+                  dataInfo={`Điểm dữ liệu: ${chartData.mq137.length}/${maxDataPoints}`}
+                  className="h-full"
+                >
+                    <ChartWrapper data={chartData.mq137} isStreaming={isStreaming}>
+                        <div className="relative h-full">
+                            <Line options={chartOptions} data={formatChartJsData(chartData.mq137, 'Hydro Sulfide', '#dc2626')} />
+                        </div>
+                    </ChartWrapper>
+                </CardChart>
+
+                {/* Temperature Chart */}
+                <CardChart
+                  title="Nhiệt độ"
+                  description="Đọc dữ liệu nhiệt độ (°C)"
+                  chartHeight="h-[350px]"
+                  dataInfo={`Điểm dữ liệu: ${chartData.temp.length}/${maxDataPoints}`}
+                  className="h-full"
+                >
+                    <ChartWrapper data={chartData.temp} isStreaming={isStreaming}>
+                        <div className="relative h-full">
+                            <Line options={chartOptions} data={formatChartJsData(chartData.temp, 'Nhiệt độ', '#16a34a')} />
+                        </div>
+                    </ChartWrapper>
+                </CardChart>
+
+                {/* Humidity Chart */}
+                <CardChart
+                  title="Độ ẩm"
+                  description="Đọc dữ liệu độ ẩm (%)"
+                  chartHeight="h-[350px]"
+                  dataInfo={`Điểm dữ liệu: ${chartData.humid.length}/${maxDataPoints}`}
+                  className="h-full"
+                >
+                    <ChartWrapper data={chartData.humid} isStreaming={isStreaming}>
+                        <div className="relative h-full">
+                           <Line options={chartOptions} data={formatChartJsData(chartData.humid, 'Độ ẩm', '#ca8a04')} />
+                        </div>
+                    </ChartWrapper>
+                </CardChart>
+              </div>
             </CardContent>
           </Card>
         </>
