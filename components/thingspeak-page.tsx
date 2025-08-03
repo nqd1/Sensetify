@@ -190,6 +190,50 @@ const chartOptions: ChartOptions<'line'> = {
     },
 };
 
+// Cấu hình chart riêng cho nhiệt độ với độ chia nhỏ nhất là 0.5
+const temperatureChartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            display: false,
+        },
+        tooltip: {
+            callbacks: {
+                title: (context) => `Time: ${context[0].label}`,
+                label: (context) => {
+                    const label = context.dataset.label || '';
+                    const value = context.parsed.y;
+                    return `${label}: ${value.toFixed(2)}°C`;
+                },
+            },
+        },
+    },
+    scales: {
+        x: {
+            ticks: {
+                font: {
+                    size: 10,
+                },
+            },
+            grid: {
+                color: 'rgba(255, 255, 255, 0.1)',
+            }
+        },
+        y: {
+            ticks: {
+                font: {
+                    size: 10,
+                },
+                stepSize: 0.5, // Độ chia nhỏ nhất là 0.5
+            },
+            grid: {
+                color: 'rgba(255, 255, 255, 0.1)',
+            }
+        },
+    },
+};
+
 const formatChartJsData = (data: ChartDataPoint[], label: string, color: string): ChartData<'line'> => {
     return {
         labels: data.map(p => p.time),
@@ -637,7 +681,7 @@ export default function ThingSpeakPage() {
                 >
                     <ChartWrapper data={chartData.temp} isStreaming={isStreaming}>
                         <div className="relative h-full">
-                            <Line options={chartOptions} data={formatChartJsData(chartData.temp, 'Nhiệt độ', '#16a34a')} />
+                            <Line options={temperatureChartOptions} data={formatChartJsData(chartData.temp, 'Nhiệt độ', '#16a34a')} />
                         </div>
                     </ChartWrapper>
                 </CardChart>
