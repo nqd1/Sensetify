@@ -410,7 +410,6 @@ const formatChartJsData = (data: ChartDataPoint[], label: string, color: string)
 export default function ThingSpeakPage() {
   const apiKey = "P91SEPV5ZZG00Y4S"
   const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState<ThingSpeakPrediction | null>(null)
   const [error, setError] = useState<string | null>(null)
   
   // Chart data states
@@ -424,6 +423,11 @@ export default function ThingSpeakPage() {
   const [pendingSensorArrays, setPendingSensorArrays] = useState<number[][]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [currentAverageData, setCurrentAverageData] = useState<number[]>([0, 0, 0, 0])
+  
+  // Prediction delay states
+  const [delayedResult, setDelayedResult] = useState<ThingSpeakPrediction | null>(null)
+  const [isWaitingForPrediction, setIsWaitingForPrediction] = useState(false)
+  const predictionDelayTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Auto-refresh states
   const [isAutoRefresh, setIsAutoRefresh] = useState(false)
@@ -444,6 +448,9 @@ export default function ThingSpeakPage() {
       }
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current)
+      }
+      if (predictionDelayTimeoutRef.current) {
+        clearTimeout(predictionDelayTimeoutRef.current)
       }
     }
   }, [])
@@ -545,9 +552,25 @@ export default function ThingSpeakPage() {
       }
 
       const data = await response.json()
-      setResult(data)
       
-      // Start streaming if we have sensor arrays
+      // Clear any previous prediction delay
+      if (predictionDelayTimeoutRef.current) {
+        clearTimeout(predictionDelayTimeoutRef.current)
+      }
+      
+      // Only show waiting state if no previous result exists (first time)
+      if (delayedResult === null) {
+        setIsWaitingForPrediction(true)
+      }
+      // Keep existing delayedResult for subsequent calls (don't clear it)
+      
+      // Start 30 second delay for prediction results
+      predictionDelayTimeoutRef.current = setTimeout(() => {
+        setDelayedResult(data)
+        setIsWaitingForPrediction(false)
+      }, 30000) // 30 seconds delay
+      
+      // Start streaming immediately (charts and data should show right away)
       if (data.sensor_arrays && data.sensor_arrays.length > 0) {
         // Clear any previous streaming
         if (streamingTimeoutRef.current) {
@@ -618,9 +641,15 @@ export default function ThingSpeakPage() {
     if (streamingTimeoutRef.current) {
       clearTimeout(streamingTimeoutRef.current)
     }
+    if (predictionDelayTimeoutRef.current) {
+      clearTimeout(predictionDelayTimeoutRef.current)
+    }
     setIsStreaming(false)
     setCurrentDataIndex(0)
     setPendingSensorArrays([])
+    setIsWaitingForPrediction(false)
+    // Keep delayedResult - don't clear it when stopping auto-refresh
+    // setDelayedResult(null) // Removed this line
   }, [])
 
   const toggleAutoRefresh = () => {
@@ -690,27 +719,44 @@ export default function ThingSpeakPage() {
         </Alert>
       )}
 
-      {result && (
+      {(isWaitingForPrediction || delayedResult) && (
         <>
+          {/* Waiting State */}
+          {isWaitingForPrediction && (
+            <Card className="border-2 border-yellow-500">
+              <CardContent>
+                <div className="text-center space-y-4">
+                                      <div className="text-4xl font-bold text-yellow-600 flex items-center justify-center gap-2">
+                      ĐANG THU THẬP DỮ LIỆU MỚI
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-yellow-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-2 h-2 bg-yellow-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-2 h-2 bg-yellow-600 rounded-full animate-bounce"></div>
+                      </div>
+                    </div>
+                  <div className="text-lg text-muted-foreground">
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Meta Model Result - Main Result */}
-          {result.predictions.meta && (
+          {delayedResult?.predictions.meta && (
             <Card className="border-2 border-primary">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Target className="h-5 w-5 mr-2" />
-                  Kết quả dự đoán cuối cùng (Mô hình tổng hợp)
+                  Kết quả dự đoán cuối cùng
                 </CardTitle>
                 <CardDescription>
-                  Kết quả được tối ưu hóa từ 4 mô hình AI cơ sở với dữ liệu ThingSpeak
+                  Kết quả được dự đoán từ hệ thống AI dựa trên dữ liệu thu thập từ cảm biến
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="text-center space-y-4">
                   <div className="text-4xl font-bold text-primary">
-                    {odorLabels[result.predictions.meta.class_label] || result.predictions.meta.class_label}
-                  </div>
-                  <div className="text-lg text-muted-foreground">
-                    Độ tin cậy: {((result.predictions.meta?.probability || 0) * 100).toFixed(2)}%
+                    {odorLabels[delayedResult.predictions.meta.class_label] || delayedResult.predictions.meta.class_label}
                   </div>
                   <Badge variant="default" className="text-sm px-4 py-2">
                     Meta Model
@@ -721,6 +767,7 @@ export default function ThingSpeakPage() {
           )}
 
           {/* Base Models in Collapsible */}
+          {delayedResult && (
           <Collapsible title="Chi tiết kết quả từ 4 mô hình cơ sở" defaultOpen={false}>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
               <Card>
@@ -729,10 +776,7 @@ export default function ThingSpeakPage() {
                   <CardTitle className="text-sm font-medium">Base Model 1</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{odorLabels[result.predictions.base_1.class_label] || result.predictions.base_1.class_label}</div>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    Độ tin cậy: {((result.predictions.base_1.probability || 0) * 100).toFixed(2)}%
-                  </div>
+                  <div className="text-xl font-bold">{odorLabels[delayedResult.predictions.base_1.class_label] || delayedResult.predictions.base_1.class_label}</div>
                 </CardContent>
               </Card>
 
@@ -742,7 +786,7 @@ export default function ThingSpeakPage() {
                   <CardTitle className="text-sm font-medium">Base Model 2</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{odorLabels[result.predictions.base_2.class_label] || result.predictions.base_2.class_label}</div>
+                  <div className="text-xl font-bold">{odorLabels[delayedResult.predictions.base_2.class_label] || delayedResult.predictions.base_2.class_label}</div>
                 </CardContent>
               </Card>
 
@@ -752,7 +796,7 @@ export default function ThingSpeakPage() {
                   <CardTitle className="text-sm font-medium">Base Model 3</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{odorLabels[result.predictions.base_3.class_label] || result.predictions.base_3.class_label}</div>
+                  <div className="text-xl font-bold">{odorLabels[delayedResult.predictions.base_3.class_label] || delayedResult.predictions.base_3.class_label}</div>
                 </CardContent>
               </Card>
 
@@ -762,11 +806,12 @@ export default function ThingSpeakPage() {
                   <CardTitle className="text-sm font-medium">Base Model 4</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{odorLabels[result.predictions.base_4.class_label] || result.predictions.base_4.class_label}</div>
+                  <div className="text-xl font-bold">{odorLabels[delayedResult.predictions.base_4.class_label] || delayedResult.predictions.base_4.class_label}</div>
                 </CardContent>
               </Card>
             </div>
           </Collapsible>
+          )}
 
           {/* Real-time Sensor Charts */}
           <Card>
